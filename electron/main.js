@@ -1,4 +1,4 @@
-﻿const { app, BrowserWindow, ipcMain, screen } = require("electron");
+﻿const { app, BrowserWindow, ipcMain, screen, Tray, Menu, dialog } = require("electron");
 const path = require("path");
 const { db } = require("./db");
 const { createScheduler } = require("./scheduler");
@@ -6,12 +6,15 @@ const { createScheduler } = require("./scheduler");
 let mainWin = null;
 let overlayWin = null;
 let scheduler = null;
+let tray = null;
+let isQuitting = false;
 
 function createMainWindow() {
   mainWin = new BrowserWindow({
     width: 1100,
     height: 720,
-    backgroundColor: "#0b0b0c",
+    transparent: true,
+    backgroundColor: "#00000000",
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
@@ -21,6 +24,18 @@ function createMainWindow() {
 
   const devUrl = process.env.VITE_DEV_SERVER_URL || "http://localhost:5173";
   mainWin.loadURL(devUrl);
+
+  mainWin.on("close", (e) => {
+    if (isQuitting) return;
+    e.preventDefault();
+    mainWin.hide();
+    maybeShowTrayHint();
+  });
+
+  mainWin.on("minimize", (e) => {
+    e.preventDefault();
+    mainWin.hide();
+  });
 }
 
 function createOverlayWindow() {
@@ -60,9 +75,76 @@ function showOverlay(payload) {
   overlayWin.showInactive(); // sin robar foco
 }
 
+function showMain() {
+  if (!mainWin) return;
+  mainWin.show();
+  mainWin.focus();
+}
+
+function hideMain() {
+  if (!mainWin) return;
+  mainWin.hide();
+}
+
+function maybeShowTrayHint() {
+  // se guarda en settings para que solo sea 1 vez
+  const seen = db.getSetting("ui:trayHintSeen", false);
+  if (seen) return;
+
+  db.setSetting("ui:trayHintSeen", true);
+
+  dialog.showMessageBox({
+    type: "info",
+    title: "Sigo activo en la bandeja",
+    message: "Quote Bubbles sigue activo en la bandeja del sistema.",
+    detail: "Busca el icono junto al reloj para abrir, mostrar una frase o salir.",
+    buttons: ["Entendido"],
+    defaultId: 0
+  });
+}
+
+function showRandomQuoteNow() {
+  const quote = db.pickRandomQuoteByTags(
+    db.getSetting("app:mode", {}).tagIds || []
+  ) || db.pickRandomQuote();
+
+  if (quote) showOverlay({ quote });
+}
+
+function createTray() {
+  const iconPath = path.join(__dirname, "assets", "tray.ico");
+  tray = new Tray(iconPath);
+
+
+  tray.setToolTip("Quote Bubbles");
+
+  const contextMenu = Menu.buildFromTemplate([
+    {
+      label: "Abrir",
+      click: () => showMain()
+    },
+    {
+      label: "Mostrar frase ahora",
+      click: () => showRandomQuoteNow()
+    },
+    { type: "separator" },
+    {
+      label: "Salir",
+      click: () => {
+        isQuitting = true;
+        app.quit();
+      }
+    }
+  ]);
+
+  tray.setContextMenu(contextMenu);
+  tray.on("click", () => showMain());
+}
+
 app.whenReady().then(() => {
   createMainWindow();
   createOverlayWindow();
+  createTray();
 
   // QUOTES
   ipcMain.handle("quotes:list", () => db.listQuotes());
@@ -134,5 +216,10 @@ app.whenReady().then(() => {
 });
 
 app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") app.quit();
+  // No quit: se queda en tray
+  // En Windows esto mantiene el proceso vivo
+});
+
+app.on("before-quit", () => {
+  isQuitting = true;
 });

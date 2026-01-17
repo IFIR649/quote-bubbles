@@ -10,10 +10,16 @@ export default function App() {
   if (isOverlay) return <Overlay />;
 
   const [tab, setTab] = useState("quotes"); // quotes | import | modes
+  const [theme, setTheme] = useState("neutral"); // neutral | calm
 
   const [quotes, setQuotes] = useState([]);
   const [form, setForm] = useState({ text: "", book: "", author: "", tags: "" });
   const [toast, setToast] = useState({ open: false, message: "" });
+
+  function applyTheme(next) {
+    document.body.classList.remove("theme-neutral", "theme-calm");
+    document.body.classList.add(next === "calm" ? "theme-calm" : "theme-neutral");
+  }
 
   function showToast(message) {
     setToast({ open: true, message });
@@ -23,6 +29,16 @@ export default function App() {
     const list = await api.quotes.list();
     setQuotes(list);
   }
+
+  useEffect(() => {
+    (async () => {
+      const saved = await api.settings.get("ui:theme", null);
+      const ls = localStorage.getItem("ui:theme");
+      const next = (saved || ls || "neutral") === "calm" ? "calm" : "neutral";
+      setTheme(next);
+      applyTheme(next);
+    })();
+  }, []);
 
   useEffect(() => { refresh(); }, []);
 
@@ -44,6 +60,14 @@ export default function App() {
     showToast("Agregada a la cola \u2705");
   }
 
+  async function toggleTheme() {
+    const next = theme === "neutral" ? "calm" : "neutral";
+    setTheme(next);
+    applyTheme(next);
+    localStorage.setItem("ui:theme", next);
+    await api.settings.set("ui:theme", next);
+  }
+
   async function testBubble() {
     await api.overlay.push({
       quote: { text: "Prueba: burbuja activa \u2728", book: "Demo", author: "T\u00fa" }
@@ -52,18 +76,41 @@ export default function App() {
 
   return (
     <div className="shell">
-      <header className="topbar">
-        <div>
-          <h1>Quote Bubbles</h1>
-          <p>{"Frases que aparecen como burbujas arriba durante el d\u00eda."}</p>
+      <header className="headerBlock">
+        <div className="brandRow">
+          <div className="brandMark">QB</div>
+
+          <div className="brandText">
+            <h1>Quote Bubbles</h1>
+            <p>Frases que aparecen como burbujas arriba durante el d\u00eda.</p>
+          </div>
         </div>
-        <button className="btn" onClick={testBubble}>Probar burbuja</button>
+
+        <div className="headerActions">
+          <button className="btn ghost" onClick={testBubble}>Probar burbuja</button>
+          <div className="themeSwitch" onClick={toggleTheme} role="button" tabIndex={0}>
+            <div className={`themePill ${theme === "calm" ? "on" : ""}`}>
+              <div className="themeKnob" />
+            </div>
+            <div className="themeLabel">
+              {theme === "neutral" ? "Neutro" : "Calma"}
+            </div>
+          </div>
+        </div>
       </header>
 
-      <nav className="tabs">
-        <button className={`tab ${tab==="quotes" ? "active":""}`} onClick={()=>setTab("quotes")}>Frases</button>
-        <button className={`tab ${tab==="import" ? "active":""}`} onClick={()=>setTab("import")}>Importar</button>
-        <button className={`tab ${tab==="modes" ? "active":""}`} onClick={()=>setTab("modes")}>Modos</button>
+      <nav className="tabsBar">
+        <div className="tabs">
+          <button className={`tab ${tab==="quotes" ? "active":""}`} onClick={()=>setTab("quotes")}>
+            Frases
+          </button>
+          <button className={`tab ${tab==="import" ? "active":""}`} onClick={()=>setTab("import")}>
+            Importar
+          </button>
+          <button className={`tab ${tab==="modes" ? "active":""}`} onClick={()=>setTab("modes")}>
+            Modos
+          </button>
+        </div>
       </nav>
 
       {tab === "quotes" && (
