@@ -1,0 +1,49 @@
+/* La ventana es transparente; esto solo es el contenido */
+html, body, #root {
+  background: transparent !important;
+}
+
+body {
+  margin: 0 !important;
+  overflow: hidden !important;
+}
+
+
+.overlayRoot {
+  width: 100vw;
+  height: 100vh;
+  display:flex;
+  justify-content:center;
+  align-items:flex-start;
+  padding-top: 10px;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(-10px);
+  transition: opacity 220ms ease, transform 220ms ease;
+}
+
+.overlayRoot.open {
+  opacity: 1;
+  transform: translateY(0px);
+}
+
+.bubble {
+  width: min(520px, calc(100vw - 40px));
+  background: rgba(18,18,20,0.70);
+  border: 1px solid rgba(255,255,255,0.18);
+  backdrop-filter: blur(14px);
+  border-radius: 18px;
+  padding: 14px 16px;
+  box-shadow: 0 18px 60px rgba(0,0,0,0.55);
+}
+
+.bubbleText {
+  font-size: 14px;
+  line-height: 1.35;
+  color: #f4f4f4;
+}
+.bubbleMeta {
+  margin-top: 8px;
+  font-size: 12px;
+  color: rgba(255,255,255,0.70);
+}
