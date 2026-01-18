@@ -1,7 +1,10 @@
 {
   "name": "quote-bubbles",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.7.1",
+  "description": "Frases como burbujas durante el dia.",
+  "author": "Alexis",
+  "main": "electron/main.js",
   "build": {
     "appId": "com.alex.quote-bubbles",
     "productName": "Quote Bubbles",
@@ -18,20 +21,22 @@
       "allowToChangeInstallationDirectory": true
     }
   },
-  "main": "electron/main.js",
   "scripts": {
     "dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
     "build": "vite build",
+    "preview": "vite preview",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder --win nsis"
   },
   "dependencies": {
     "better-sqlite3": "^12.6.2",
-    "electron": "^40.0.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },
   "devDependencies": {
+    "electron": "^40.0.0",
+    "electron-builder": "^26.4.0",
     "@eslint/js": "^9.39.1",
     "@types/react": "^19.2.5",
     "@types/react-dom": "^19.2.3",
