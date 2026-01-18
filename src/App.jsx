@@ -5,6 +5,35 @@ import Toast from "./components/Toast.jsx";
 import ImportJson from "./views/ImportJson.jsx";
 import Modes from "./views/Modes.jsx";
 
+function Titlebar() {
+  return (
+    <nav className="custom-titlebar">
+      <div className="drag-region">
+        <span className="spark">✨</span>
+        Quote Bubbles
+      </div>
+
+      <div className="window-controls">
+        <button
+          className="control-btn minimize"
+          title="Minimizar"
+          onClick={() => window.api.windowControls.minimize()}
+        >
+          ─
+        </button>
+
+        <button
+          className="control-btn close"
+          title="Cerrar"
+          onClick={() => window.api.windowControls.closeToTray()}
+        >
+          ✕
+        </button>
+      </div>
+    </nav>
+  );
+}
+
 export default function App() {
   const isOverlay = useMemo(() => window.location.hash === "#/overlay", []);
   if (isOverlay) return <Overlay />;
@@ -76,6 +105,7 @@ export default function App() {
 
   return (
     <div className="shell">
+      <Titlebar />
       <header className="headerBlock">
         <div className="brandRow">
           <div className="brandMark">QB</div>

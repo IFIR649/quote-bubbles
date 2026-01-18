@@ -13,20 +13,21 @@ export default function Overlay() {
 
       setTimeout(() => {
         setOpen(false);
-        setTimeout(() => api.overlay.hide(), 260); // espera animacion
+        setTimeout(() => api.overlay.hide(), 600); // espera animacion
       }, 8000);
     });
 
     return off;
   }, []);
 
+  const quoteText = quote?.text || "";
+  const meta = [quote?.book, quote?.author].filter(Boolean).join(" \u2014 ");
+
   return (
-    <div className={`overlayRoot ${open ? "open" : ""}`}>
-      <div className="bubble">
-        <div className="bubbleText">{"\u201c"}{quote?.text || ""}{"\u201d"}</div>
-        <div className="bubbleMeta">
-          {[quote?.book, quote?.author].filter(Boolean).join(" \u2014 ")}
-        </div>
+    <div className={`bubble-container ${open ? "show" : "hidden"}`}>
+      <div className="bubble-glass">
+        <div className="bubbleText">{"\u201c"}{quoteText}{"\u201d"}</div>
+        {meta && <div className="bubbleMeta">{meta}</div>}
       </div>
     </div>
   );

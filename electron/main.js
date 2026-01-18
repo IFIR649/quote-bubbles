@@ -13,6 +13,7 @@ function createMainWindow() {
   mainWin = new BrowserWindow({
     width: 1100,
     height: 720,
+    frame: false,
     transparent: true,
     backgroundColor: "#00000000",
     webPreferences: {
@@ -181,6 +182,17 @@ app.whenReady().then(() => {
     const quote = db.queueNext();
     if (quote) showOverlay({ quote });
     return !!quote;
+  });
+
+  // WINDOW
+  ipcMain.handle("window:minimize", () => {
+    if (mainWin) mainWin.minimize();
+    return true;
+  });
+  ipcMain.handle("window:closeToTray", () => {
+    if (mainWin) mainWin.hide();
+    maybeShowTrayHint();
+    return true;
   });
 
   // SCHEDULER

@@ -35,5 +35,9 @@ contextBridge.exposeInMainWorld("api", {
       ipcRenderer.on("overlay:show", handler);
       return () => ipcRenderer.removeListener("overlay:show", handler);
     }
+  },
+  windowControls: {
+    minimize: () => ipcRenderer.invoke("window:minimize"),
+    closeToTray: () => ipcRenderer.invoke("window:closeToTray"),
   }
 });
