@@ -1,5 +1,27 @@
-﻿import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { api } from "../api";
+import {
+  IconFocus,
+  IconZap,
+  IconCog,
+  IconDrop,
+  IconPop,
+  IconMute,
+  IconTag,
+  IconList,
+  IconChevronDown,
+  IconChevronUp
+} from "../ui/icons";
+
+const DEFAULT_SMART = {
+  enabled: true,
+  idleGateSec: 60,
+  jitterEnabled: true,
+  focusJitterMin: 8,
+  focusJitterMax: 15,
+  surpriseJitterMin: 20,
+  surpriseJitterMax: 60
+};
 
 const DEFAULT_MODE = {
   enabled: true,
@@ -8,7 +30,8 @@ const DEFAULT_MODE = {
   surpriseMinMinutes: 20,
   surpriseMaxMinutes: 60,
   customMinutes: 10,
-  tagIds: []
+  tagIds: [],
+  smart: DEFAULT_SMART
 };
 
 export default function Modes() {
@@ -17,8 +40,26 @@ export default function Modes() {
   const [newTag, setNewTag] = useState("");
   const [savedMsg, setSavedMsg] = useState("");
   const [queue, setQueue] = useState([]);
+  const [tagsOpen, setTagsOpen] = useState(false);
+  const [queueOpen, setQueueOpen] = useState(false);
+  const [sound, setSound] = useState("drop");
 
   const selected = useMemo(() => new Set(cfg.tagIds || []), [cfg.tagIds]);
+  const smart = cfg.smart || DEFAULT_SMART;
+  const mode = cfg.mode;
+  const enabled = cfg.enabled !== false;
+  const smartEnabled = smart.enabled !== false;
+  const jitterEnabled = smart.jitterEnabled !== false;
+
+  const focusEveryMin = Number(cfg.focusMinutes ?? DEFAULT_MODE.focusMinutes);
+  const surpriseMin = Number(cfg.surpriseMinMinutes ?? DEFAULT_MODE.surpriseMinMinutes);
+  const surpriseMax = Number(cfg.surpriseMaxMinutes ?? DEFAULT_MODE.surpriseMaxMinutes);
+  const customEveryMin = Number(cfg.customMinutes ?? DEFAULT_MODE.customMinutes);
+  const idleGateSec = Number(smart.idleGateSec ?? DEFAULT_SMART.idleGateSec);
+  const focusMin = Number(smart.focusJitterMin ?? DEFAULT_SMART.focusJitterMin);
+  const focusMax = Number(smart.focusJitterMax ?? DEFAULT_SMART.focusJitterMax);
+  const surpriseJitterMin = Number(smart.surpriseJitterMin ?? DEFAULT_SMART.surpriseJitterMin);
+  const surpriseJitterMax = Number(smart.surpriseJitterMax ?? DEFAULT_SMART.surpriseJitterMax);
 
   async function refreshQueue() {
     const q = await api.queue.list();
@@ -27,7 +68,13 @@ export default function Modes() {
 
   async function load() {
     const loaded = await api.settings.get("app:mode", DEFAULT_MODE);
-    setCfg({ ...DEFAULT_MODE, ...loaded });
+    setCfg({
+      ...DEFAULT_MODE,
+      ...loaded,
+      smart: { ...DEFAULT_SMART, ...(loaded.smart || {}) }
+    });
+    const s = await api.settings.get("ui:sound", "drop");
+    setSound(s === "pop" || s === "mute" || s === "drop" ? s : "drop");
     const t = await api.tags.list();
     setTags(t);
     await refreshQueue();
@@ -43,11 +90,42 @@ export default function Modes() {
     setCfg({ ...cfg, tagIds: Array.from(s) });
   }
 
+  function updateSmart(patch) {
+    setCfg((prev) => ({
+      ...prev,
+      smart: { ...DEFAULT_SMART, ...(prev.smart || {}), ...patch }
+    }));
+  }
+
+  function setMode(next) {
+    setCfg((prev) => ({ ...prev, mode: next }));
+    if (next !== "custom") setQueueOpen(false);
+  }
+
+  async function setSoundMode(next) {
+    setSound(next);
+    await api.settings.set("ui:sound", next);
+
+    if (next !== "mute") {
+      const src = next === "drop" ? "/sfx/calm-drop.mp3" : "/sfx/neutral-pop.mp3";
+      try {
+        const a = new Audio(src);
+        a.volume = 0.25;
+        a.play().catch(() => {});
+      } catch {}
+    }
+  }
+
   async function save() {
     setSavedMsg("");
-    await api.settings.set("app:mode", cfg);
+    const nextCfg = {
+      ...cfg,
+      smart: { ...DEFAULT_SMART, ...(cfg.smart || {}) }
+    };
+    await api.settings.set("app:mode", nextCfg);
+    await api.settings.set("ui:sound", sound);
     await api.scheduler.resync();
-    setSavedMsg("Guardado. El scheduler se actualiz\u00f3.");
+    setSavedMsg("Guardado. El scheduler se actualizo.");
     setTimeout(() => setSavedMsg(""), 2500);
   }
 
@@ -61,7 +139,6 @@ export default function Modes() {
 
   async function delTag(id) {
     await api.tags.delete(id);
-    // si estaba seleccionado, lo quitamos
     const next = (cfg.tagIds || []).filter(x => x !== id);
     setCfg({ ...cfg, tagIds: next });
     setTags(await api.tags.list());
@@ -79,152 +156,388 @@ export default function Modes() {
 
   async function pushNextNow() {
     const ok = await api.overlay.pushNextFromQueue();
-    if (!ok) setSavedMsg("La cola est\u00e1 vac\u00eda.");
+    if (!ok) setSavedMsg("La cola esta vacia.");
     await refreshQueue();
   }
 
-  return (
-    <div className="card">
-      <h2>Modos</h2>
-      <p className="hint">{"Elige un modo y (opcional) filtra por tags. Si no eliges tags, usar\u00e1 cualquier frase."}</p>
-
-      <div className="rowBetween">
-        <label className="switch">
+  function renderTagsSection() {
+    return (
+      <>
+        <p className="hint">Si no eliges tags, usa cualquier frase.</p>
+        <div className="tagAddRow">
           <input
-            type="checkbox"
-            checked={cfg.enabled !== false}
-            onChange={(e) => setCfg({ ...cfg, enabled: e.target.checked })}
+            placeholder="Nuevo tag... (ej. enfoque)"
+            value={newTag}
+            onChange={(e) => setNewTag(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") addTag(); }}
           />
-          <span>Activado</span>
-        </label>
-
-        <button className="btn primary" onClick={save}>Guardar</button>
-      </div>
-
-      <div className="modeBox">
-        <div className="modeRow">
-          <button className={`pill ${cfg.mode==="focus" ? "on":""}`} onClick={()=>setCfg({ ...cfg, mode:"focus" })}>Enfoque</button>
-          <button className={`pill ${cfg.mode==="surprise" ? "on":""}`} onClick={()=>setCfg({ ...cfg, mode:"surprise" })}>Sorpresa</button>
-          <button className={`pill ${cfg.mode==="custom" ? "on":""}`} onClick={()=>setCfg({ ...cfg, mode:"custom" })}>Personalizado</button>
+          <button className="btn" onClick={addTag}>Agregar</button>
         </div>
 
-        {cfg.mode === "focus" && (
-          <div className="modeSettings">
-            <div className="field">
-              <div className="label">{"Cada cu\u00e1ntos minutos"}</div>
-              <input
-                type="number"
-                min="1"
-                value={cfg.focusMinutes}
-                onChange={(e)=>setCfg({ ...cfg, focusMinutes: Number(e.target.value) })}
-              />
-            </div>
-            <div className="note">Este modo lanza frases constantemente con un intervalo fijo.</div>
-          </div>
-        )}
-
-        {cfg.mode === "surprise" && (
-          <div className="modeSettings">
-            <div className="row">
-              <div className="field">
-                <div className="label">{"M\u00edn (min)"}</div>
-                <input
-                  type="number"
-                  min="1"
-                  value={cfg.surpriseMinMinutes}
-                  onChange={(e)=>setCfg({ ...cfg, surpriseMinMinutes: Number(e.target.value) })}
-                />
+        <div className="tagGrid">
+          {tags.map(t => {
+            const on = selected.has(t.id);
+            return (
+              <div key={t.id} className={`tagChip ${on ? "on" : ""}`}>
+                <button className="tagMain" onClick={() => toggleTag(t.id)} title="Incluir/excluir">
+                  {t.name}
+                </button>
+                <button className="tagDel" onClick={() => delTag(t.id)} title="Eliminar tag">{"\u00d7"}</button>
               </div>
-              <div className="field">
-                <div className="label">{"M\u00e1x (min)"}</div>
-                <input
-                  type="number"
-                  min="1"
-                  value={cfg.surpriseMaxMinutes}
-                  onChange={(e)=>setCfg({ ...cfg, surpriseMaxMinutes: Number(e.target.value) })}
-                />
-              </div>
-            </div>
-            <div className="note">Este modo lanza frases en intervalos aleatorios dentro del rango.</div>
-          </div>
-        )}
+            );
+          })}
+          {tags.length === 0 && <div className="hint">Aun no tienes tags. Crea uno para filtrar frases.</div>}
+        </div>
+      </>
+    );
+  }
 
-        {cfg.mode === "custom" && (
-          <div className="modeSettings">
-            <div className="field">
-              <div className="label">Intervalo (min)</div>
-              <input
-                type="number"
-                min="1"
-                value={cfg.customMinutes}
-                onChange={(e)=>setCfg({ ...cfg, customMinutes: Number(e.target.value) })}
-              />
+  function renderQueueSection() {
+    return (
+      <>
+        <div className="rowActions">
+          <button className="btn" onClick={pushNextNow}>Siguiente ahora</button>
+          <button className="btn danger" onClick={clearQueue}>Vaciar cola</button>
+        </div>
+
+        <div className="queueList">
+          {queue.map(it => (
+            <div key={it.queueId} className="queueItem">
+              <div className="queueText">
+                <div className="quote">{"\u201c"}{it.text}{"\u201d"}</div>
+                <div className="meta">
+                  {[it.book, it.author].filter(Boolean).join(" \u2014 ")}
+                </div>
+              </div>
+              <button className="btn danger" onClick={() => removeQueueItem(it.queueId)}>
+                Quitar
+              </button>
             </div>
-            <div className="note">
-              Por ahora, "personalizado" usa el mismo picker (random con tags).
-              Luego metemos la cola tipo Spotify con drag & drop.
-            </div>
-          </div>
-        )}
+          ))}
+          {queue.length === 0 && <div className="hint">Cola vacia. En "Frases" usa "+ Cola".</div>}
+        </div>
+      </>
+    );
+  }
+
+  return (
+    <div className="modesLayout">
+      <div className="modesTop">
+        <div>
+          <h2>Modos</h2>
+          <p className="muted">Elige un modo. Lo demas aparece solo cuando lo necesitas.</p>
+        </div>
+
+        <div className="modesTopActions">
+          <label className="switchLine">
+            <input
+              type="checkbox"
+              checked={enabled}
+              onChange={(e) => setCfg({ ...cfg, enabled: e.target.checked })}
+            />
+            <span>Activado</span>
+          </label>
+
+          <button className="btn primary" onClick={save}>
+            Guardar
+          </button>
+        </div>
       </div>
+
+      <div className="modeCards">
+        <button
+          type="button"
+          className={`modeCard ${mode === "focus" ? "active" : ""}`}
+          onClick={() => setMode("focus")}
+        >
+          <div className="modeIcon"><IconFocus /></div>
+          <div className="modeLabel">Enfoque</div>
+          <div className="modeHint">Constante y disciplinado</div>
+        </button>
+
+        <button
+          type="button"
+          className={`modeCard ${mode === "surprise" ? "active" : ""}`}
+          onClick={() => setMode("surprise")}
+        >
+          <div className="modeIcon"><IconZap /></div>
+          <div className="modeLabel">Sorpresa</div>
+          <div className="modeHint">Aleatorio durante el dia</div>
+        </button>
+
+        <button
+          type="button"
+          className={`modeCard ${mode === "custom" ? "active" : ""}`}
+          onClick={() => setMode("custom")}
+        >
+          <div className="modeIcon"><IconCog /></div>
+          <div className="modeLabel">Personalizado</div>
+          <div className="modeHint">Cola + reglas propias</div>
+        </button>
+      </div>
+
+      <section className="configStage">
+        {mode === "focus" && (
+          <div className="configPanel">
+            <div className="panelHeader">
+              <h3>Modo Enfoque</h3>
+              <p className="muted">Ideal para rutina. Intervalo fijo o con jitter natural.</p>
+            </div>
+
+            <div className="formGrid">
+              <div className="field">
+                <div className="label">Cada (min)</div>
+                <input
+                  type="number"
+                  min="1"
+                  value={focusEveryMin}
+                  onChange={(e) => setCfg({ ...cfg, focusMinutes: Number(e.target.value || 1) })}
+                />
+              </div>
+
+              <div className="fieldSwitch">
+                <label className="switchLine">
+                  <input
+                    type="checkbox"
+                    checked={smartEnabled}
+                    onChange={(e) => updateSmart({ enabled: e.target.checked })}
+                  />
+                  <span>Ritmo inteligente</span>
+                </label>
+                <div className="muted tiny">Si estas inactivo, no muestra burbujas.</div>
+              </div>
+
+              {smartEnabled && (
+                <>
+                  <div className="field">
+                    <div className="label">No molestar si inactivo (seg)</div>
+                    <input
+                      type="number"
+                      min="10"
+                      value={idleGateSec}
+                      onChange={(e) => updateSmart({ idleGateSec: Number(e.target.value || 60) })}
+                    />
+                  </div>
+
+                  <div className="fieldSwitch">
+                    <label className="switchLine">
+                      <input
+                        type="checkbox"
+                        checked={jitterEnabled}
+                        onChange={(e) => updateSmart({ jitterEnabled: e.target.checked })}
+                      />
+                      <span>Rango natural (jitter)</span>
+                    </label>
+                    <div className="muted tiny">Evita patrones exactos para que no lo ignores.</div>
+                  </div>
+
+                  {jitterEnabled && (
+                    <>
+                      <div className="field">
+                        <div className="label">Enfoque min (min)</div>
+                        <input
+                          type="number"
+                          min="1"
+                          value={focusMin}
+                          onChange={(e) => updateSmart({ focusJitterMin: Number(e.target.value || 8) })}
+                        />
+                      </div>
+                      <div className="field">
+                        <div className="label">Enfoque max (min)</div>
+                        <input
+                          type="number"
+                          min="1"
+                          value={focusMax}
+                          onChange={(e) => updateSmart({ focusJitterMax: Number(e.target.value || 15) })}
+                        />
+                      </div>
+                    </>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        {mode === "surprise" && (
+          <div className="configPanel">
+            <div className="panelHeader">
+              <h3>Modo Sorpresa</h3>
+              <p className="muted">Apariciones aleatorias para mantener atencion ligera.</p>
+            </div>
+
+            <div className="formGrid">
+              <div className="field">
+                <div className="label">Sorpresa min (min)</div>
+                <input
+                  type="number"
+                  min="1"
+                  value={surpriseMin}
+                  onChange={(e) => setCfg({ ...cfg, surpriseMinMinutes: Number(e.target.value || 20) })}
+                />
+              </div>
+
+              <div className="field">
+                <div className="label">Sorpresa max (min)</div>
+                <input
+                  type="number"
+                  min="1"
+                  value={surpriseMax}
+                  onChange={(e) => setCfg({ ...cfg, surpriseMaxMinutes: Number(e.target.value || 60) })}
+                />
+              </div>
+
+              <div className="fieldSwitch">
+                <label className="switchLine">
+                  <input
+                    type="checkbox"
+                    checked={smartEnabled}
+                    onChange={(e) => updateSmart({ enabled: e.target.checked })}
+                  />
+                  <span>Ritmo inteligente</span>
+                </label>
+                <div className="muted tiny">Evita enviar frases si estas AFK.</div>
+              </div>
+
+              {smartEnabled && (
+                <>
+                  <div className="field">
+                    <div className="label">No molestar si inactivo (seg)</div>
+                    <input
+                      type="number"
+                      min="10"
+                      value={idleGateSec}
+                      onChange={(e) => updateSmart({ idleGateSec: Number(e.target.value || 60) })}
+                    />
+                  </div>
+
+                  <div className="fieldSwitch">
+                    <label className="switchLine">
+                      <input
+                        type="checkbox"
+                        checked={jitterEnabled}
+                        onChange={(e) => updateSmart({ jitterEnabled: e.target.checked })}
+                      />
+                      <span>Rango natural (jitter)</span>
+                    </label>
+                    <div className="muted tiny">Evita patrones exactos para que no lo ignores.</div>
+                  </div>
+
+                  {jitterEnabled && (
+                    <>
+                      <div className="field">
+                        <div className="label">Sorpresa min (min)</div>
+                        <input
+                          type="number"
+                          min="1"
+                          value={surpriseJitterMin}
+                          onChange={(e) => updateSmart({ surpriseJitterMin: Number(e.target.value || 20) })}
+                        />
+                      </div>
+                      <div className="field">
+                        <div className="label">Sorpresa max (min)</div>
+                        <input
+                          type="number"
+                          min="1"
+                          value={surpriseJitterMax}
+                          onChange={(e) => updateSmart({ surpriseJitterMax: Number(e.target.value || 60) })}
+                        />
+                      </div>
+                    </>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        {mode === "custom" && (
+          <div className="configPanel">
+            <div className="panelHeader">
+              <h3>Modo Personalizado</h3>
+              <p className="muted">Primero usa la cola. Si se vacia, cae a random por tags.</p>
+            </div>
+
+            <div className="formGrid">
+              <div className="field">
+                <div className="label">Cada (min)</div>
+                <input
+                  type="number"
+                  min="1"
+                  value={customEveryMin}
+                  onChange={(e) => setCfg({ ...cfg, customMinutes: Number(e.target.value || 1) })}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+      </section>
 
       {savedMsg && <div className="notice ok">{savedMsg}</div>}
 
-      <div className="sep" />
-
-      <h3>Tags (filtro por modo)</h3>
-
-      <div className="tagAddRow">
-        <input
-          placeholder="Nuevo tag\u2026 (ej. enfoque)"
-          value={newTag}
-          onChange={(e) => setNewTag(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter") addTag(); }}
-        />
-        <button className="btn" onClick={addTag}>Agregar</button>
-      </div>
-
-      <div className="tagGrid">
-        {tags.map(t => {
-          const on = selected.has(t.id);
-          return (
-            <div key={t.id} className={`tagChip ${on ? "on":""}`}>
-              <button className="tagMain" onClick={() => toggleTag(t.id)} title="Incluir/excluir">
-                {t.name}
-              </button>
-              <button className="tagDel" onClick={() => delTag(t.id)} title="Eliminar tag">{"\u00d7"}</button>
-            </div>
-          );
-        })}
-        {tags.length === 0 && <div className="hint">{"A\u00fan no tienes tags. Crea uno para filtrar frases."}</div>}
-      </div>
-
-      <div className="sep" />
-
-      <h3>Cola (modo Personalizado)</h3>
-      <p className="hint">{"Cuando el modo est\u00e1 en Personalizado, primero se usa esta cola. Si se vac\u00eda, cae a random con tags."}</p>
-
-      <div className="rowActions">
-        <button className="btn" onClick={pushNextNow}>Siguiente ahora</button>
-        <button className="btn danger" onClick={clearQueue}>Vaciar cola</button>
-      </div>
-
-      <div className="queueList">
-        {queue.map(it => (
-          <div key={it.queueId} className="queueItem">
-            <div className="queueText">
-              <div className="quote">{"\u201c"}{it.text}{"\u201d"}</div>
-              <div className="meta">
-                {[it.book, it.author].filter(Boolean).join(" \u2014 ")}
-              </div>
-            </div>
-            <button className="btn danger" onClick={() => removeQueueItem(it.queueId)}>
-              Quitar
+      <section className="globalSettings">
+        <div className="soundRow">
+          <div className="soundLabel">Sonido</div>
+          <div className="soundSeg">
+            <button
+              type="button"
+              className={`soundBtn ${sound === "drop" ? "active" : ""}`}
+              onClick={() => setSoundMode("drop")}
+            >
+              <IconDrop style={{ marginRight: 6 }} /> Calma
+            </button>
+            <button
+              type="button"
+              className={`soundBtn ${sound === "pop" ? "active" : ""}`}
+              onClick={() => setSoundMode("pop")}
+            >
+              <IconPop style={{ marginRight: 6 }} /> Pop
+            </button>
+            <button
+              type="button"
+              className={`soundBtn ${sound === "mute" ? "active" : ""}`}
+              onClick={() => setSoundMode("mute")}
+            >
+              <IconMute style={{ marginRight: 6 }} /> Silencio
             </button>
           </div>
-        ))}
-        {queue.length === 0 && <div className="hint">{"Cola vac\u00eda. En \"Frases\" usa \"+ Cola\"."}</div>}
-      </div>
+        </div>
+
+        <div className="accordion">
+          <button
+            type="button"
+            className="accordionHeader"
+            onClick={() => setTagsOpen(v => !v)}
+          >
+            <span className="accTitle"><IconTag style={{ marginRight: 8 }} /> Filtrar por Tags (opcional)</span>
+            <span className="arrowIcon">{tagsOpen ? <IconChevronUp /> : <IconChevronDown />}</span>
+          </button>
+
+          {tagsOpen && (
+            <div className="accordionBody">
+              {renderTagsSection()}
+            </div>
+          )}
+        </div>
+
+        <div className={`accordion ${mode !== "custom" ? "disabled" : ""}`}>
+          <button
+            type="button"
+            className="accordionHeader"
+            disabled={mode !== "custom"}
+            onClick={() => setQueueOpen(v => !v)}
+          >
+            <span className="accTitle"><IconList style={{ marginRight: 8 }} /> Cola (modo Personalizado)</span>
+            <span className="arrowIcon">{queueOpen ? <IconChevronUp /> : <IconChevronDown />}</span>
+          </button>
+
+          {mode === "custom" && queueOpen && (
+            <div className="accordionBody">
+              {renderQueueSection()}
+            </div>
+          )}
+        </div>
+      </section>
     </div>
   );
 }

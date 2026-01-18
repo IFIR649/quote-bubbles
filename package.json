@@ -2,6 +2,22 @@
   "name": "quote-bubbles",
   "private": true,
   "version": "0.0.0",
+  "build": {
+    "appId": "com.alex.quote-bubbles",
+    "productName": "Quote Bubbles",
+    "directories": {
+      "buildResources": "build"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  },
   "main": "electron/main.js",
   "scripts": {
     "dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",

@@ -1,4 +1,4 @@
-﻿const { app, BrowserWindow, ipcMain, screen, Tray, Menu, dialog } = require("electron");
+﻿const { app, BrowserWindow, ipcMain, screen, Tray, Menu, dialog, powerMonitor } = require("electron");
 const path = require("path");
 const { db } = require("./db");
 const { createScheduler } = require("./scheduler");
@@ -10,9 +10,11 @@ let tray = null;
 let isQuitting = false;
 
 function createMainWindow() {
+  const iconPath = path.join(__dirname, "../build/icon.ico");
   mainWin = new BrowserWindow({
     width: 1100,
     height: 720,
+    icon: iconPath,
     frame: false,
     transparent: true,
     backgroundColor: "#00000000",
@@ -203,13 +205,23 @@ app.whenReady().then(() => {
     surpriseMinMinutes: 20,
     surpriseMaxMinutes: 60,
     customMinutes: 10,
-    tagIds: []
+    tagIds: [],
+    smart: {
+      enabled: true,
+      idleGateSec: 60,
+      jitterEnabled: true,
+      focusJitterMin: 8,
+      focusJitterMax: 15,
+      surpriseJitterMin: 20,
+      surpriseJitterMax: 60
+    }
   };
 
   scheduler = createScheduler({
     onQuote: (quote) => showOverlay({ quote }),
     getConfig: () => db.getSetting("app:mode", defaultMode),
-    pickQuoteCustom: () => db.queueNext()
+    pickQuoteCustom: () => db.queueNext(),
+    getIdleTime: () => powerMonitor.getSystemIdleTime()
   });
 
   scheduler.start();

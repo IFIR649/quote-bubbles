@@ -1,6 +1,6 @@
 ﻿import React, { useEffect, useMemo, useState } from "react";
 import { api } from "./api";
-import Overlay from "./overlay/Overlay.jsx";
+import Overlay from "./overlay/overlay.jsx";
 import Toast from "./components/Toast.jsx";
 import ImportJson from "./views/ImportJson.jsx";
 import Modes from "./views/Modes.jsx";
